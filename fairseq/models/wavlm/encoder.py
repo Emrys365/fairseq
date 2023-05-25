@@ -27,6 +27,12 @@ from fairseq.modules import (
 from fairseq.modules.transformer_sentence_encoder import init_bert_params
 
 
+def manual_layer_norm(x, layer_weight, layer_bias, layer_eps):
+    mean = x.mean(-1, keepdim=True)
+    std = (x.var(-1, keepdim=True, unbiased=False) + layer_eps).sqrt()
+    return layer_weight * (x - mean) / std + layer_bias
+
+
 class ConvFeatureExtractionModel(nn.Module):
     def __init__(
         self,
@@ -131,7 +137,6 @@ class ConvFeatureExtractionModel(nn.Module):
             pass
 
     def forward(self, x, mask=None):
-
         # BxT -> BxCxT
         x = x.unsqueeze(1)
         if self.conv_type == "custom":
@@ -216,10 +221,28 @@ class TransformerEncoder(nn.Module):
         self.layer_norm = LayerNorm(self.embedding_dim)
         self.layerdrop = args.encoder_layerdrop
 
+        # for conditional layer normalization (cLN) based adapters
+        self.cln_layers = tuple(set(args.cln_layers)) if args.cln_layers else ()
+
         self.apply(init_bert_params)
 
-    def forward(self, x, padding_mask=None, streaming_mask=None, layer=None):
-        x, layer_results = self.extract_features(x, padding_mask, streaming_mask, layer)
+    def forward(
+        self,
+        x,
+        padding_mask=None,
+        streaming_mask=None,
+        layer=None,
+        cln_weights=None,
+        cln_biases=None,
+    ):
+        x, layer_results = self.extract_features(
+            x,
+            padding_mask,
+            streaming_mask,
+            layer,
+            cln_weights=cln_weights,
+            cln_biases=cln_biases,
+        )
 
         if self.layer_norm_first and layer is None:
             x = self.layer_norm(x)
@@ -227,15 +250,25 @@ class TransformerEncoder(nn.Module):
         return x, layer_results
 
     def extract_features(
-        self, x, padding_mask=None, streaming_mask=None, tgt_layer=None
+        self,
+        x,
+        padding_mask=None,
+        streaming_mask=None,
+        tgt_layer=None,
+        cln_weights=None,
+        cln_biases=None,
     ):
+        # for conditional layer normalization (cLN) based adapters
+        if len(self.cln_layers) > 0:
+            assert len(cln_weights) == len(self.cln_layers)
+            assert len(cln_biases) == len(self.cln_layers)
 
         if padding_mask is not None:
             x[padding_mask] = 0
 
         x_conv = self.pos_conv(x.transpose(1, 2))
         x_conv = x_conv.transpose(1, 2)
-        x += x_conv
+        x = x + x_conv
 
         if not self.layer_norm_first:
             x = self.layer_norm(x)
@@ -254,12 +287,20 @@ class TransformerEncoder(nn.Module):
         for i, layer in enumerate(self.layers):
             dropout_probability = np.random.random()
             if not self.training or (dropout_probability > self.layerdrop):
+                # for conditional layer normalization (cLN) based adapters
+                cln_w, cln_b = None, None
+                if i in self.cln_layers:
+                    k = self.cln_layers.index(i)
+                    cln_w, cln_b = cln_weights[k], cln_biases[k]
+
                 x, z, pos_bias = layer(
                     x,
                     self_attn_padding_mask=padding_mask,
                     need_weights=False,
                     self_attn_mask=streaming_mask,
                     pos_bias=pos_bias,
+                    cln_weights=cln_w,
+                    cln_biases=cln_b,
                 )
             if tgt_layer is not None:
                 layer_results.append((x, z))
@@ -274,6 +315,37 @@ class TransformerEncoder(nn.Module):
         x = x.transpose(0, 1)
 
         return x, layer_results
+
+    def build_adapter_layers(self, layers, input_dim=768, hidden_dim=64):
+        # used by fairseq/models/tshubert/tshubert_asr_adapter.py
+        for i in layers:
+            if i < self.encoder_layers:
+                self.layers[i].adapter_layer = AdapterLayer(input_dim, hidden_dim)
+
+
+class AdapterLayer(nn.Module):
+    """Ref: Parameter-Efficient Transfer Learning for NLP; Houlsby et al. (ICML'19)"""
+
+    def __init__(self, input_dim, hidden_dim):
+        super().__init__()
+        self.adapter = nn.Sequential(
+            self.init_linear_layer(input_dim, hidden_dim),
+            nn.GELU(),
+            self.init_linear_layer(hidden_dim, input_dim),
+        )
+
+    def init_linear_layer(self, dim_in, dim_out, weight_std=1e-03, bias_value=0):
+        layer = nn.Linear(dim_in, dim_out)
+        bias = torch.full_like(layer.bias, bias_value)
+        weight = torch.normal(
+            torch.zeros_like(layer.weight), torch.full_like(layer.weight, weight_std)
+        )
+        layer.bias = nn.Parameter(bias)
+        layer.weight = nn.Parameter(weight)
+        return layer
+
+    def forward(self, x):
+        return self.adapter(x) + x
 
 
 class TransformerSentenceEncoderLayer(nn.Module):
@@ -298,7 +370,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         rescale_init: bool = False,
         gru_rel_pos: bool = False,
     ) -> None:
-
         super().__init__()
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -338,6 +409,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
         # layer norm associated with the position wise feed-forward NN
         self.final_layer_norm = LayerNorm(self.embedding_dim)
 
+        # no adapter layer by default
+        self.adapter_layer = None
+
     def forward(
         self,
         x: torch.Tensor,
@@ -345,15 +419,35 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self_attn_padding_mask: torch.Tensor = None,
         need_weights: bool = False,
         pos_bias=None,
+        cln_weights=None,
+        cln_biases=None,
     ):
         """
         LayerNorm is applied either before or after the self-attention/ffn
         modules similar to the original Transformer imlementation.
         """
+        # for conditional layer normalization (cLN) based adapters
+        use_cln = cln_weights is not None
+        if use_cln:
+            assert len(cln_weights) == len(cln_biases) == 2
+            cln_weight1 = (
+                self.self_attn_layer_norm.weight * cln_weights[0] + cln_biases[0]
+            ).unsqueeze(0)
+            cln_bias1 = self.self_attn_layer_norm.bias.expand(1, 1, -1)
+            cln_eps1 = self.self_attn_layer_norm.eps
+            cln_weight2 = (
+                self.final_layer_norm.weight * cln_weights[1] + cln_biases[1]
+            ).unsqueeze(0)
+            cln_bias2 = self.final_layer_norm.bias.expand(1, 1, -1)
+            cln_eps2 = self.final_layer_norm.eps
+
         residual = x
 
         if self.layer_norm_first:
-            x = self.self_attn_layer_norm(x)
+            if use_cln:
+                x = manual_layer_norm(x, cln_weight1, cln_bias1, cln_eps1)
+            else:
+                x = self.self_attn_layer_norm(x)
             x, attn, pos_bias = self.self_attn(
                 query=x,
                 key=x,
@@ -364,10 +458,15 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 position_bias=pos_bias,
             )
             x = self.dropout1(x)
+            if self.adapter_layer is not None:
+                x = self.adapter_layer(x)
             x = residual + x
 
             residual = x
-            x = self.final_layer_norm(x)
+            if use_cln:
+                x = manual_layer_norm(x, cln_weight2, cln_bias2, cln_eps2)
+            else:
+                x = self.final_layer_norm(x)
             if self.activation_name == "glu":
                 x = self.fc1(x)
             else:
@@ -375,6 +474,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
             x = self.dropout2(x)
             x = self.fc2(x)
             x = self.dropout3(x)
+            if self.adapter_layer is not None:
+                x = self.adapter_layer(x)
             x = residual + x
         else:
             x, attn, pos_bias = self.self_attn(
@@ -388,9 +489,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
             )
 
             x = self.dropout1(x)
+            if self.adapter_layer is not None:
+                x = self.adapter_layer(x)
             x = residual + x
 
-            x = self.self_attn_layer_norm(x)
+            if use_cln:
+                x = manual_layer_norm(x, cln_weight1, cln_bias1, cln_eps1)
+            else:
+                x = self.self_attn_layer_norm(x)
 
             residual = x
             if self.activation_name == "glu":
@@ -400,7 +506,12 @@ class TransformerSentenceEncoderLayer(nn.Module):
             x = self.dropout2(x)
             x = self.fc2(x)
             x = self.dropout3(x)
+            if self.adapter_layer is not None:
+                x = self.adapter_layer(x)
             x = residual + x
-            x = self.final_layer_norm(x)
+            if use_cln:
+                x = manual_layer_norm(x, cln_weight2, cln_bias2, cln_eps2)
+            else:
+                x = self.final_layer_norm(x)
 
         return x, attn, pos_bias

@@ -202,6 +202,11 @@ class WavLMConfig(FairseqDataclass):
         metadata={"help": "skip computing losses over unmasked frames"},
     )
 
+    normalize: bool = field(
+        default=False,
+        metadata={"help": "for compatibility with official WavLM models"},
+    )
+
     ####################################################
     # new parameters (in addition to HuBERT) for WavLM #
     ####################################################
@@ -220,6 +225,15 @@ class WavLMConfig(FairseqDataclass):
         default=False, metadata={"help": "apply gated relative position embedding"}
     )
     expand_attention_head_size: int = field(default=-1, metadata={"help": "not used"})
+
+    # only used for cLN-based speaker adapter
+    cln_layers: Optional[List[int]] = field(
+        default=None,
+        metadata={
+            "help": "indexes of Transformer layers to apply conditional layer "
+            "normalization to (only used when `spk_adapter_type` is `cln`)"
+        },
+    )
 
 
 @register_model("wavlm", dataclass=WavLMConfig)
@@ -426,8 +440,31 @@ class WavLM(BaseFairseqModel):
         mask: bool = True,
         features_only: bool = False,
         output_layer: Optional[int] = None,
+        cln_weights: Optional[List[Tuple[torch.Tensor]]] = None,
+        cln_biases: Optional[List[Tuple[torch.Tensor]]] = None,
     ) -> Dict[str, torch.Tensor]:
         """output layer is 1-based"""
+        features, features_pen, target_list, padding_mask = self.forward_conv(
+            source, target_list=target_list, padding_mask=padding_mask
+        )
+        return self.forward_transformer(
+            features,
+            features_pen,
+            target_list=target_list,
+            padding_mask=padding_mask,
+            mask=mask,
+            features_only=features_only,
+            output_layer=output_layer,
+            cln_weights=cln_weights,
+            cln_biases=cln_biases,
+        )
+
+    def forward_conv(
+        self,
+        source: torch.Tensor,
+        target_list: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+    ):
         features = self.forward_features(source)
         if target_list is not None:
             features, target_list = self.forward_targets(features, target_list)
@@ -446,7 +483,21 @@ class WavLM(BaseFairseqModel):
 
         features = self.dropout_input(features)
         # unmasked_features = self.dropout_features(unmasked_features)
+        return features, features_pen, target_list, padding_mask
 
+    def forward_transformer(
+        self,
+        features: torch.Tensor,
+        features_pen: torch.Tensor,
+        target_list: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        mask: bool = True,
+        features_only: bool = False,
+        output_layer: Optional[int] = None,
+        cln_weights: Optional[List[Tuple[torch.Tensor]]] = None,
+        cln_biases: Optional[List[Tuple[torch.Tensor]]] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """output layer is 1-based"""
         if mask:
             x, mask_indices = self.apply_mask(features, padding_mask)
         else:
@@ -462,6 +513,8 @@ class WavLM(BaseFairseqModel):
             x,
             padding_mask=padding_mask,
             layer=None if output_layer is None else output_layer - 1,
+            cln_weights=cln_weights,
+            cln_biases=cln_biases,
         )
 
         if features_only:
@@ -543,6 +596,36 @@ class WavLM(BaseFairseqModel):
         feature = res["features"] if ret_conv else res["x"]
         if ret_layer_results:
             feature = (feature, res["layer_results"])
+        return feature, res["padding_mask"]
+
+    def extract_features_spk(
+        self,
+        features: torch.Tensor,
+        features_pen: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        mask: bool = False,
+        ret_conv: bool = False,
+        output_layer: Optional[int] = None,
+        ret_layer_results: bool = False,
+        cln_weights: Optional[List[Tuple[torch.Tensor]]] = None,
+        cln_biases: Optional[List[Tuple[torch.Tensor]]] = None,
+        **kwargs,
+    ):
+        res = self.forward_transformer(
+            features,
+            features_pen,
+            padding_mask=padding_mask,
+            mask=mask,
+            features_only=True,
+            output_layer=output_layer,
+            cln_weights=cln_weights,
+            cln_biases=cln_biases,
+        )
+
+        feature = res["features"] if ret_conv else res["x"]
+        if ret_layer_results:
+            layer_results = [ll[0].transpose(0, 1) for ll in res["layer_results"]]
+            feature = (feature, layer_results)
         return feature, res["padding_mask"]
 
     def get_logits(self, net_output, is_masked=True):

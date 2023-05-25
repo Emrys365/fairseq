@@ -244,22 +244,6 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     # only keep the dict file
     mv data-bin/dict.txt "${lab_dir}/dict.km.txt"
     rm -r data-bin/
-
-    # Convert km labels into a text scp file
-    for tsv_file_name in ${train_set} ${dev_set}; do
-        # move ${datadir}/${tsv_file_name}/ to new folders and rename ptext
-        plabel_dir="${datadir}/${tsv_file_name}_${feature_type}_km${n_clusters}"
-        if [[ -d "${plabel_dir}" ]]; then
-            echo "${plabel_dir} already exists, will remove it"
-            rm -r ${plabel_dir}
-        fi
-        mkdir -p ${plabel_dir}
-        cp -r ${datadir}/${tsv_file_name}/* ${plabel_dir}
-
-        paste -d " " <(tail -n +2 ${tsv_dir}/${tsv_file_name}.tsv | awk 'function basename(file) {sub(".*/", "", file); return file} {print basename($1)}' | sed -e 's/\(.flac\|.wav\)$//g') ${lab_dir}/${tsv_file_name}.km > ${plabel_dir}/text
-
-        utils/fix_data_dir.sh "${plabel_dir}"
-    done
 fi
 
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then

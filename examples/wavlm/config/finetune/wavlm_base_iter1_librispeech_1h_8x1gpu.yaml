@@ -8,8 +8,8 @@ common:
   seed: 1337
 
 checkpoint:
-  save_interval: 5
-  save_interval_updates: 1
+  save_interval: 50
+  save_interval_updates: 1000
   keep_interval_updates: 1
   no_epoch_checkpoints: true
   best_checkpoint_metric: wer
@@ -34,10 +34,10 @@ task:
 dataset:
   num_workers: 2
   max_tokens: 2200000  # before 10000 updates
-  # max_tokens: 1200000  # after 10000 updates (in case of OOM)
+  #max_tokens: 1200000  # after 10000 updates
   skip_invalid_size_inputs_valid_test: true
   validate_after_updates: ${model.freeze_finetune_updates}
-  validate_interval: 5
+  validate_interval: 1000
   train_subset: train
   valid_subset: valid
 
@@ -50,7 +50,7 @@ optimization:
   lr: [0.00005]
   sentence_avg: true
   update_freq: [2]  # before 10000 updates
-  # update_freq: [3]  # after 10000 updates (in case of OOM)
+  #update_freq: [3]  # after 10000 updates
 
 optimizer:
   _name: adam

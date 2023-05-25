@@ -171,7 +171,9 @@ class SequenceGenerator(nn.Module):
                 yield id, src, ref, hypos[i]
 
     @torch.no_grad()
-    def generate(self, models, sample: Dict[str, Dict[str, Tensor]], **kwargs) -> List[List[Dict[str, Tensor]]]:
+    def generate(
+        self, models, sample: Dict[str, Dict[str, Tensor]], **kwargs
+    ) -> List[List[Dict[str, Tensor]]]:
         """Generate translations. Match the api of other fairseq generators.
 
         Args:
@@ -223,7 +225,10 @@ class SequenceGenerator(nn.Module):
                 else torch.tensor(src_tokens.size(-1)).to(src_tokens)
             )
         else:
-            raise Exception("expected src_tokens or source in net input. input keys: " + str(net_input.keys()))
+            raise Exception(
+                "expected src_tokens or source in net input. input keys: "
+                + str(net_input.keys())
+            )
 
         # bsz: total number of sentences in beam
         # Note that src_tokens may have more than 2 dimensions (i.e. audio features)
@@ -328,7 +333,9 @@ class SequenceGenerator(nn.Module):
                 encoder_outs = self.model.reorder_encoder_out(
                     encoder_outs, reorder_state
                 )
-            with torch.autograd.profiler.record_function("EnsembleModel: forward_decoder"):
+            with torch.autograd.profiler.record_function(
+                "EnsembleModel: forward_decoder"
+            ):
                 lprobs, avg_attn_scores = self.model.forward_decoder(
                     tokens[:, : step + 1],
                     encoder_outs,
@@ -752,6 +759,11 @@ class EnsembleModel(nn.Module):
     def forward(self):
         pass
 
+    def has_frontend(self):
+        return hasattr(self.single_model, "frontend") or hasattr(
+            self.single_model, "ssl_encoder"
+        )
+
     def has_encoder(self):
         return hasattr(self.single_model, "encoder")
 
@@ -759,10 +771,19 @@ class EnsembleModel(nn.Module):
         return self.has_incremental
 
     def max_decoder_positions(self):
-        return min([m.max_decoder_positions() for m in self.models if hasattr(m, "max_decoder_positions")] + [sys.maxsize])
+        return min(
+            [
+                m.max_decoder_positions()
+                for m in self.models
+                if hasattr(m, "max_decoder_positions")
+            ]
+            + [sys.maxsize]
+        )
 
     @torch.jit.export
     def forward_encoder(self, net_input: Dict[str, Tensor]):
+        if self.has_frontend():
+            net_input = self.single_model.forward_frontend_torchscript(net_input)
         if not self.has_encoder():
             return None
         return [model.encoder.forward_torchscript(net_input) for model in self.models]

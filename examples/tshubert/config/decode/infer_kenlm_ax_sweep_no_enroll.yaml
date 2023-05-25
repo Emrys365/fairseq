@@ -1,0 +1,70 @@
+# @package _group_
+
+defaults:
+  - model: null
+  - hydra/sweeper: ax
+
+task:
+  _name: tshubert_pretraining
+  single_target: true
+  fine_tuning_no_enroll: true
+  data: ???
+  normalize: ???
+  pad_audio: true
+  load_enrollment_and_emb: ???
+
+decoding:
+  type: kenlm
+  lexicon: ???
+  lmpath: ???
+  beamthreshold: 100
+  beam: 5
+  lmweight: ???
+  wordscore: ???
+  silweight: 0
+  unique_wer_file: true
+common_eval:
+  results_path: ???
+  path: ???
+  post_process: letter
+dataset:
+  max_tokens: 1100000
+  gen_subset: ???
+
+hydra:
+  run:
+    dir: ${common_eval.results_path}/beam${decoding.beam}_lmw${decoding.lmweight}_wrd${decoding.wordscore}_sil${decoding.silweight}
+  sweep:
+    dir: ${common_eval.results_path}
+    subdir: beam${decoding.beam}_th${decoding.beamthreshold}_lmw${decoding.lmweight}_wrd${decoding.wordscore}_sil${decoding.silweight}
+  sweeper:
+
+    # The following part of config is used to setup the Hydra Ax plugin and is optional
+    ax_config:
+
+      # max_trials is application-specific. Tune it for your use case
+      max_trials: 30
+
+      experiment:
+        # Default to minimize, set to false to maximize
+        minimize: true
+
+      early_stop:
+        # Number of epochs without a significant improvement from
+        # the currently known best parameters
+        # An Epoch is defined as a batch of trials executed in parallel
+        max_epochs_without_improvement: 10
+        minimize: true
+        epsilon: 1.0e-05
+
+      # the synthetic measurements in this example have 0 error
+      # which is specified by setting is_noisy to false
+      is_noisy: false
+
+      params:
+        decoding.lmweight:
+          type: range
+          bounds: [1, 10]
+        decoding.wordscore:
+          type: range
+          bounds: [-1, 1]

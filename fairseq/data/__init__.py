@@ -14,6 +14,8 @@ from .add_target_dataset import AddTargetDataset
 from .append_token_dataset import AppendTokenDataset
 from .audio.raw_audio_dataset import BinarizedAudioDataset, FileAudioDataset
 from .audio.hubert_dataset import HubertDataset
+from .audio.tshubert_dataset import TsHubertDataset
+from .audio.tshubert_2mix_dataset import TsHubert2MixDataset
 from .audio.wavlm_dataset import WavLMDataset
 from .backtranslation_dataset import BacktranslationDataset
 from .bucket_pad_length_dataset import BucketPadLengthDataset
@@ -87,6 +89,7 @@ __all__ = [
     "FileAudioDataset",
     "GroupedIterator",
     "HubertDataset",
+    "TsHubertDataset",
     "WavLMDataset",
     "IdDataset",
     "IndexedCachedDataset",

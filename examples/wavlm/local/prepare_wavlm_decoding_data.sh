@@ -52,34 +52,52 @@ fi
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     log "Stage 1: Preparing data files"
 
-	mkdir -p "${datadir}/test_clean"
+	mkdir -p "${datadir}/ls_dev_clean"
+	${python} local/prepare_tsv.py \
+        "${librispeech}" \
+        --audio_paths "${librispeech}/dev-clean" \
+        --audio_format ".flac" \
+        --max_workers ${nj} \
+        --max_chunksize 200 > "${datadir}/ls_dev_clean/test.tsv"
+
+	mkdir -p "${datadir}/ls_dev_other"
+	${python} local/prepare_tsv.py \
+        "${librispeech}" \
+        --audio_paths "${librispeech}/dev-other" \
+        --audio_format ".flac" \
+        --max_workers ${nj} \
+        --max_chunksize 200 > "${datadir}/ls_dev_other/test.tsv"
+
+	mkdir -p "${datadir}/ls_test_clean"
 	${python} local/prepare_tsv.py \
         "${librispeech}" \
         --audio_paths "${librispeech}/test-clean" \
         --audio_format ".flac" \
         --max_workers ${nj} \
-        --max_chunksize 200 > "${datadir}/test_clean/test.tsv"
+        --max_chunksize 200 > "${datadir}/ls_test_clean/test.tsv"
 
-	mkdir -p "${datadir}/test_other"
+	mkdir -p "${datadir}/ls_test_other"
 	${python} local/prepare_tsv.py \
         "${librispeech}" \
         --audio_paths "${librispeech}/test-other" \
         --audio_format ".flac" \
         --max_workers ${nj} \
-        --max_chunksize 200 > "${datadir}/test_other/test.tsv"
+        --max_chunksize 200 > "${datadir}/ls_test_other/test.tsv"
 
-	for subset in test_clean test_other; do
+	for subset in ls_test_clean ls_test_other; do
 		${python} libri_labels.py \
 			"${datadir}/${subset}/test.tsv" \
 			--output-dir "${datadir}/${subset}" --output-name "test"
 	done
 
 	# "${datadir}/
-	# ├── test_clean
+	# ├── ls_test_clean
 	# │   ├── test.ltr
 	# │   ├── test.tsv
 	# │   └── test.wrd
-	# └── test_other
+	# ├── ls_test_other
+	# ├── ls_dev_clean
+	# └── ls_dev_other
 fi
 
 log "Successfully finished. [elapsed=${SECONDS}s]"

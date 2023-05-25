@@ -5,3 +5,4 @@
 
 from .wavlm import *  # noqa
 from .wavlm_asr import *  # noqa
+from .wavlm_asr_mix import *  # noqa

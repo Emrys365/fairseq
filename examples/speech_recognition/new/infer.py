@@ -31,6 +31,7 @@ from fairseq.dataclass.configs import (
     DatasetConfig,
     DistributedTrainingConfig,
     FairseqDataclass,
+    GenerationConfig,
 )
 from fairseq.logging.meters import StopwatchMeter, TimeMeter
 from fairseq.logging.progress_bar import BaseProgressBar
@@ -76,6 +77,7 @@ class InferConfig(FairseqDataclass):
             "help": "if true, assumes we are using ax for tuning and returns a tuple for ax to consume"
         },
     )
+    generation: GenerationConfig = GenerationConfig()   # only used for Seq2Seq
 
 
 def reset_logging():
@@ -109,7 +111,12 @@ class InferenceProcessor:
             self.cfg.dataset.gen_subset,
             task_cfg=saved_cfg.task,
         )
-        self.generator = Decoder(cfg.decoding, self.tgt_dict)
+        if getattr(self.task.cfg, "autoregressive", False):
+            logger.info(cfg.generation)
+            self.generator = self.task.build_generator(models, cfg.generation)
+        else:
+            logger.info(cfg.decoding)
+            self.generator = Decoder(cfg.decoding, self.tgt_dict)
         self.gen_timer = StopwatchMeter()
         self.wps_meter = TimeMeter()
         self.num_sentences = 0

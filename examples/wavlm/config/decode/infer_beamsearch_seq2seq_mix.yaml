@@ -1,0 +1,31 @@
+# @package _group_
+
+defaults:
+  - model: null
+
+hydra:
+  run:
+    dir: ${common_eval.results_path}/viterbi
+  sweep:
+    dir: ${common_eval.results_path}
+    subdir: viterbi
+
+task:
+  _name: wavlm_pretraining
+  single_target: true
+  fine_tuning_mix: true
+  data: ???
+  normalize: ???
+  pad_audio: true
+  autoregressive: ???
+
+generation:
+  beam: 20
+  nbest: 1
+common_eval:
+  results_path: ???
+  path: ???
+  post_process: letter
+dataset:
+  max_tokens: 1100000
+  gen_subset: ???

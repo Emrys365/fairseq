@@ -94,6 +94,14 @@ fi
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     log "Stage 1: Preparing data files"
 
+	mkdir -p "${datadir}/ls_clean_100"
+	${python} local/prepare_tsv.py \
+        "${librispeech_ft}/librispeech_finetuning" \
+        --audio_paths "${librispeech}/train-clean-100" \
+        --audio_format ".flac" \
+        --max_workers ${nj} \
+        --max_chunksize 500 > "${datadir}/ls_clean_100/train.tsv"
+
 	mkdir -p "${datadir}/ll_10h"
 	${python} local/prepare_tsv.py \
         "${librispeech_ft}/librispeech_finetuning" \
@@ -126,7 +134,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
         --max_workers ${nj} \
         --max_chunksize 500 > "${tsv_dir}/valid.tsv"
 
-	for subset in ll_10h ll_1h ll_10min; do
+	for subset in ll_10h ll_1h ll_10min ls_clean_100; do
 		${python} libri_labels.py \
 			"${datadir}/${subset}/train.tsv" \
 			--output-dir "${datadir}/${subset}" --output-name "train"
@@ -137,7 +145,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
 			--output-dir "${datadir}/${subset}" --output-name "valid"
 	done
 
-	for subset in ll_10h ll_1h ll_10min; do
+	for subset in ll_10h ll_1h ll_10min ls_clean_100; do
 		# generate the dict file (https://github.com/facebookresearch/fairseq/issues/2514)
 		fairseq-preprocess --dataset-impl mmap --trainpref "${datadir}/${subset}/train.ltr" --only-source --thresholdsrc 0
 		# only keep the dict file
@@ -155,7 +163,8 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
 	# │   ├── valid.tsv
 	# │   └── valid.wrd
 	# ├── ll_1h
-	# └── ll_10min
+	# ├── ll_10min
+	# └── ls_clean_100
 fi
 
 log "Successfully finished. [elapsed=${SECONDS}s]"

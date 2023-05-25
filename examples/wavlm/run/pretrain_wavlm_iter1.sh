@@ -7,6 +7,8 @@ set -u
 set -o pipefail
 
 root_path=/path/to/fairseq/examples/wavlm
+# This config file is intended for using 2 nodes with 4 RTX 2080 Ti GPUs each.
+# It takes around 3 weeks to finish 400k steps.
 config_name=wavlm_base_iter1_librispeech_2x4gpu
 config_dir=${root_path}/config/pretrain/
 expdir=${root_path}/exp
