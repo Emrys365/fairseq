@@ -199,12 +199,13 @@ class TsHubertDataset(FairseqDataset):
         self.audio_sids = sids
         self.sizes = sizes
 
-        noise_root, noise_names, tot_noise, noise_sizes = load_noise_audio(
-            manifest_noise, max_keep_sample_size, min_keep_sample_size
-        )
-        self.noise_root = noise_root
-        self.noise_names = noise_names
-        self.noise_sizes = noise_sizes
+        if noise_apply_prob > 0:
+            noise_root, noise_names, tot_noise, noise_sizes = load_noise_audio(
+                manifest_noise, max_keep_sample_size, min_keep_sample_size
+            )
+            self.noise_root = noise_root
+            self.noise_names = noise_names
+            self.noise_sizes = noise_sizes
 
         self.sample_rate = sample_rate
         self.shuffle = shuffle

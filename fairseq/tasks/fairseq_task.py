@@ -317,8 +317,8 @@ class FairseqTask(object):
         """
         from fairseq import models, quantization_utils
 
-        model = models.build_model(cfg, self)
-        model = quantization_utils.quantize_model_scalar(model, cfg, from_checkpoint)
+        model = models.build_model(cfg, self, from_checkpoint)
+        model = quantization_utils.quantize_model_scalar(model, cfg)
         return model
 
     def build_criterion(self, cfg: DictConfig):
