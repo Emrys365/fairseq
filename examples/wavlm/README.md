@@ -14,14 +14,14 @@
 }
 ```
 
-Check https://github.com/microsoft/UniSpeech/blob/main/WavLM/README.md for more information.
+Check https://github.com/microsoft/unilm/blob/master/wavlm/README.md for more information.
 
 ## Pre-trained models
-Model | Pre-training Dataset | Fine-tuning Dataset | Model
-|---|---|---|---
-WavLM Base |  [960 hrs LibriSpeech](http://www.openslr.org/12)| -  | [Azure Storage](https://msranlcmtteamdrive.blob.core.windows.net/share/wavlm/WavLM-Base.pt?sv=2020-04-08&st=2021-11-05T00%3A35%3A31Z&se=2022-11-06T00%3A35%3A00Z&sr=b&sp=r&sig=JljnRVzyHY6AjHzhVmHV5KyQQCvvGfgp9D2M02oGJBU%3D) <br> [Google Drive](https://drive.google.com/file/d/19-C7SMQvEFAYLG5uc47NX_MY03JCbI4x/view?usp=sharing)
-WavLM Base+ | [60k hrs Libri-Light](https://github.com/facebookresearch/libri-light) + [10k hrs GigaSpeech](https://github.com/SpeechColab/GigaSpeech) + [24k hrs VoxPopuli](https://github.com/facebookresearch/voxpopuli/tree/main)| -  |  [Azure Storage](https://msranlcmtteamdrive.blob.core.windows.net/share/wavlm/WavLM-Base+.pt?sv=2020-04-08&st=2021-11-05T00%3A34%3A47Z&se=2022-10-06T00%3A34%3A00Z&sr=b&sp=r&sig=Gkf1IByHaIn1t%2FVEd9D6WHjZ3zu%2Fk5eSdoj21UytKro%3D) <br> [Google Drive](https://drive.google.com/file/d/1PlbT_9_B4F9BsD_ija84sUTVw7almNX8/view?usp=sharing) 
-WavLM Large | [60k hrs Libri-Light](https://github.com/facebookresearch/libri-light) + [10k hrs GigaSpeech](https://github.com/SpeechColab/GigaSpeech) + [24k hrs VoxPopuli](https://github.com/facebookresearch/voxpopuli/tree/main)| -  | [Azure Storage](https://msranlcmtteamdrive.blob.core.windows.net/share/wavlm/WavLM-Large.pt?sv=2020-08-04&st=2021-11-22T10%3A03%3A53Z&se=2022-11-23T10%3A03%3A00Z&sr=b&sp=r&sig=3kB8dwTCyIS8YQ7gW5oXmDrXV%2FAaLmoxBS37oPpFsz4%3D) <br> [Google Drive](https://drive.google.com/file/d/1p8nbj16b7YA16sqPZ4E0JUL-oIDUBGwU/view?usp=sharing)
+| Model | Pre-training Dataset | Fine-tuning Dataset | Official Model | Adapted checkpoint for Fairseq finetuning |
+|---|---|---|---|---|
+| WavLM Base |  [960 hrs LibriSpeech](http://www.openslr.org/12)| -  | [Azure Storage](https://valle.blob.core.windows.net/share/wavlm/WavLM-Base.pt?sv=2020-08-04&st=2023-03-01T07%3A51%3A05Z&se=2033-03-02T07%3A51%3A00Z&sr=c&sp=rl&sig=QJXmSJG9DbMKf48UDIU1MfzIro8HQOf3sqlNXiflY1I%3D) <br> [Google Drive](https://drive.google.com/file/d/1BhTPLUkfN6e2xkqR8LEm9lByXbLY1IYd/view?usp=share_link) | [HuggingFace Repo](https://huggingface.co/wyz/WavLM_models_for_fairseq_finetuning/blob/main/WavLM-Base_cpt.pt) |
+| WavLM Base+ | [60k hrs Libri-Light](https://github.com/facebookresearch/libri-light) + [10k hrs GigaSpeech](https://github.com/SpeechColab/GigaSpeech) + [24k hrs VoxPopuli](https://github.com/facebookresearch/voxpopuli/tree/main)| -  |  [Azure Storage](https://valle.blob.core.windows.net/share/wavlm/WavLM-Base+.pt?sv=2020-08-04&st=2023-03-01T07%3A51%3A05Z&se=2033-03-02T07%3A51%3A00Z&sr=c&sp=rl&sig=QJXmSJG9DbMKf48UDIU1MfzIro8HQOf3sqlNXiflY1I%3D) <br> [Google Drive](https://drive.google.com/file/d/1-zlAj2SyVJVsbhifwpTlAfrgc9qu-HDb/view?usp=share_link) | [HuggingFace Repo](https://huggingface.co/wyz/WavLM_models_for_fairseq_finetuning/blob/main/WavLM-Base%2B_cpt.pt) |
+| WavLM Large | [60k hrs Libri-Light](https://github.com/facebookresearch/libri-light) + [10k hrs GigaSpeech](https://github.com/SpeechColab/GigaSpeech) + [24k hrs VoxPopuli](https://github.com/facebookresearch/voxpopuli/tree/main)| -  | [Azure Storage](https://valle.blob.core.windows.net/share/wavlm/WavLM-Large.pt?sv=2020-08-04&st=2023-03-01T07%3A51%3A05Z&se=2033-03-02T07%3A51%3A00Z&sr=c&sp=rl&sig=QJXmSJG9DbMKf48UDIU1MfzIro8HQOf3sqlNXiflY1I%3D) <br> [Google Drive](https://drive.google.com/file/d/12-cB34qCTvByWT-QtOcZaqwwO21FLSqU/view?usp=share_link) | [HuggingFace Repo](https://huggingface.co/wyz/WavLM_models_for_fairseq_finetuning/blob/main/wavlm_large_cpt.pt) |
 
 ## Load a model
 ```python
@@ -49,6 +49,37 @@ rep = model.extract_features(wav_input_16khz)[0]
 wav_input_16khz = torch.randn(1,10000)
 rep, layer_results = model.extract_features(wav_input_16khz, output_layer=model.cfg.encoder_layers, ret_layer_results=True)[0]
 layer_reps = [x.transpose(0, 1) for x, _ in layer_results]
+```
+## Load adapted checkpoints for Fairseq finetuning
+> NOTE: The adapted checkpoints are only guaranteed to have the same `model configuration` and `model parameters` as the official released models. The other parameters (such as `task hyperparameters` and `optimizer hyperparameters`) are just a template.
+>
+> Therefore, these adapted checkpoints are only suitable to be used as an initialization for fine-tuning in the downstream tasks, **NOT** for continuing pre-training.
+>
+> A typical use case is to set `--init /path/to/wavlm_xxxxx_cpt.pt` in `run/finetune_*.sh` scripts.
+
+```python
+import torch
+from fairseq import checkpoint_utils
+
+
+# Load the adapted checkpoints
+ckpt_path = "/path/to/wavlm_large_cpt.pt"
+models, cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
+model = models[0]
+# Load the official checkpoints (for comparison)
+org_ckpt = torch.load("/path/to/wavlm_large.pt")
+
+# Ensure that model parameters are the same as the official ones
+state_dict = model.state_dict()
+for k in org_ckpt['model']:
+    torch.testing.assert_allclose(org_ckpt['model'][k], state_dict[k])
+
+# Ensure that model configuration is the same as the official one
+for k in org_ckpt['cfg']:
+    if k == 'normalize':
+        assert org_ckpt['cfg'][k] == cfg.task[k], k
+        continue
+    assert cfg.model[k] == org_ckpt['cfg'][k], k
 ```
 
 ## Train a new model
