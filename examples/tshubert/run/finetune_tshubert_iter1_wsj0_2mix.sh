@@ -6,6 +6,9 @@ set -e
 set -u
 set -o pipefail
 
+# before srun this file, run the following command:
+# salloc -J wavlm_finetune_iter1 -p 2080ti -x gqxx-01-125,gqxx-01-111 --gres=gpu:8 --nodes 2 --ntasks-per-node 4 --mem=6G --cpus-per-task 2
+
 lang=en
 root_path=/path/to/fairseq/examples/tshubert
 #config_name=tshubert_base_iter1_libri2mix_train100_8x1gpu
