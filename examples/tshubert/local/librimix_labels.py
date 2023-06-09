@@ -48,8 +48,9 @@ def main():
             if dir not in transcriptions:
                 parts = dir.split(os.path.sep)
                 trans_path = f"{parts[-2]}-{parts[-1]}.trans.txt"
-                path = os.path.join(root, dir, trans_path)
-                assert os.path.exists(path)
+                path = list(Path(root).glob(os.path.join("*", dir, trans_path)))
+                assert len(path) == 1, path
+                path = path[0]
                 texts = {}
                 with open(path, "r") as trans_f:
                     for tline in trans_f:

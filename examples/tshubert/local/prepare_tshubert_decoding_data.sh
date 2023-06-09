@@ -16,7 +16,7 @@ Usage: $0 --stage <stage> --stop_stage <stop_stage> --python <python> --datadir 
   optional argument:
     [--stage]: start stage, default is 0
     [--stop_stage]: stop stage, default is 100
-    [--python]: path to pthon binary
+    [--python]: path to python binary
     [--datadir]: path the data root directory
     [--librispeech]: path to the root directory of Librispeech data
     [--librimix]: path to the root directory of Librimix data
@@ -92,7 +92,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
 
 	${python} local/librimix_labels.py \
 		"${datadir}/test_2mix/test.tsv" \
-		--librispeech-root "${librispeech}/test-clean" \
+		--librispeech-root "${librispeech}" \
 		--output-dir "${datadir}/test_2mix" --output-name "test"
 fi
 

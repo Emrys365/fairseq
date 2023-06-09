@@ -16,7 +16,7 @@ Usage: $0 --stage <stage> --stop_stage <stop_stage> --python <python> --datadir 
   optional argument:
     [--stage]: start stage, default is 0
     [--stop_stage]: stop stage, default is 100
-    [--python]: path to pthon binary
+    [--python]: path to python binary
     [--datadir]: path the data root directory
     [--librispeech]: path to the root directory of Librispeech data
     [--librimix]: path to the root directory of Librimix data
@@ -87,7 +87,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
         --audio_format wav
 
 	awk 'BEGIN {count=1; prev="";} {
-		if (NR != 1) {split($0, a, "."); split(a[1], parts, "_"); if (prev == $0) {count=count+1} else {count=1} print(parts[count]); prev=$0;}
+		if (NR != 1) {split($0, a, "."); n=split(a[1], paths, "/"); split(paths[n], parts, "_"); if (prev == $0) {count=count+1} else {count=1} print(parts[count]); prev=$0;}
 	}' "${datadir}/train_2mix/train.tsv" > "${datadir}/train_2mix/train.uid"
 	awk -F "-" '{print $1}' "${datadir}/train_2mix/train.uid" > "${datadir}/train_2mix/train.sid"
 
@@ -126,12 +126,12 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
 
 	${python} local/librimix_labels.py \
 		"${datadir}/train_2mix/train.tsv" \
-		--librispeech-root "${librispeech}/train-clean-100" \
+		--librispeech-root "${librispeech}" \
 		--output-dir "${datadir}/train_2mix" --output-name "train"
 
 	${python} local/librimix_labels.py \
 		"${datadir}/train_2mix/valid.tsv" \
-		--librispeech-root "${librispeech}/dev-clean" \
+		--librispeech-root "${librispeech}" \
 		--output-dir "${datadir}/train_2mix" --output-name "valid"
 
 	# generate the dict file (https://github.com/facebookresearch/fairseq/issues/2514)

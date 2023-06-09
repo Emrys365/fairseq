@@ -15,7 +15,7 @@ Usage: $0 --stage <stage> --stop_stage <stop_stage> --python <python> --datadir 
   optional argument:
     [--stage]: start stage, default is 0
     [--stop_stage]: stop stage, default is 100
-    [--python]: path to pthon binary
+    [--python]: path to python binary
     [--datadir]: path the data root directory
 
     [--feature_type]: feature type, either "mfcc" or "WavLM*"
