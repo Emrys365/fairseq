@@ -3,6 +3,16 @@
 ## Reference
 
 ```bibtex
+# Interspeech 2023
+# https://isca-speech.org/archive/interspeech_2023/zhang23w_interspeech.html
+@inproceedings{zhang23w_interspeech,
+  title={Weakly-Supervised Speech Pre-training: A Case Study on Target Speech Recognition},
+  author={Wangyou Zhang and Yanmin Qian},
+  booktitle={Proc. INTERSPEECH},
+  pages={3517--3521},
+  year=2023,
+}
+
 # Preprint
 # https://arxiv.org/abs/2305.16286
 

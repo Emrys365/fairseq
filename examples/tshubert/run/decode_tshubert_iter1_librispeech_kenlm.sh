@@ -13,7 +13,7 @@ config_name=infer_kenlm_no_enroll
 config_dir=${root_path}/config/decode/
 expdir=${root_path}/exp/finetune_${lang}/ll_1h/tshubert_base_iter1_ll_1h_8x1gpu_finetune_ll_1h_from_checkpoint_best
 checkpoint=checkpoint_best.pt
-test_sets="ls_test_clean ls_dev_other"
+test_sets="ls_test_clean ls_test_other"
 data=${root_path}/../wavlm/data
 device=0
 

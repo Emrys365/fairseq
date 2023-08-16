@@ -7,7 +7,7 @@ set -u
 set -o pipefail
 
 # before srun this file, run the following command:
-# salloc -J wavlm_iter1 -p 2080ti -x gqxx-01-125,gqxx-01-111 --gres=gpu:4 --nodes 2 --ntasks-per-node 4 --mem=28G --cpus-per-task 5
+# salloc -J tshubert_iter1 -p 2080ti -x gqxx-01-125,gqxx-01-111 --gres=gpu:4 --nodes 2 --ntasks-per-node 4 --mem=28G --cpus-per-task 5
 
 root_path=/path/to/fairseq/examples/tshubert
 # This config file is intended for using 2 nodes with 4 RTX 2080 Ti GPUs each.
