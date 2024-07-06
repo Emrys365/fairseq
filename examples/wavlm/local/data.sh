@@ -280,7 +280,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --with_timestamp False \
             --max_workers ${nj} \
             --max_chunksize 500 \
-            --outfile "${alignment_dir}/${dset}_other"
+            --outfile "${alignment_dir}/${dset}_other.tsv"
     done
 
     lab_name="km"
