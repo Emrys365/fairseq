@@ -5,13 +5,13 @@ set -u
 set -o pipefail
 
 log() {
-  local fname=local/prepare_tshubert_pretraining_data.sh
+  local fname=local/prepare_tshubert_pretraining_data_upsupervised.sh
   #local fname=${BASH_SOURCE[1]##*/}
   echo -e "$(date '+%Y-%m-%dT%H:%M:%S') (${fname}:${BASH_LINENO[0]}:${FUNCNAME[1]}) $*"
 }
 
 help_message=$(cat << EOF
-Usage: $0 --stage <stage> --stop_stage <stop_stage> --python <python> --datadir <datadir> --feature_type <feature_type> --nj <nj> --layer_index <layer_index> --max_chunk <max_chunk> --sample_rate <sample_rate> --n_clusters <n_clusters> --kmrootdir <kmrootdir> --percent <percent> --km_batch_size <km_batch_size> --tsv_dir <tsv_dir> --train_set <train_set> --dev_set <dev_set>
+Usage: $0 --stage <stage> --stop_stage <stop_stage> --python <python> --datadir <datadir> --feature_type <feature_type> --nj <nj> --layer_index <layer_index> --max_chunk <max_chunk> --sample_rate <sample_rate> --n_clusters <n_clusters> --kmrootdir <kmrootdir> --percent <percent> --km_batch_size <km_batch_size> --tsv_dir <tsv_dir> --train_set <train_set> --dev_set <dev_set> --spk_model_ckpt <spk_model_ckpt>
   optional argument:
     [--stage]: start stage, default is 0
     [--stop_stage]: stop stage, default is 100
@@ -34,6 +34,8 @@ Usage: $0 --stage <stage> --stop_stage <stop_stage> --python <python> --datadir 
 
     [--train_set]: name of the training set
     [--dev_set]: name of the development set
+
+    [--spk_model_ckpt]: path to the pretrained speaker model checkpoint
 EOF
 )
 
@@ -64,6 +66,9 @@ tsv_dir=${datadir}/tsv_files
 
 train_set=train960
 dev_set=dev
+
+# spk_model_ckpt=local/spk_embs/model.th
+spk_model_ckpt=/path/to/voxceleb_resnet293_LM.onnx
 
 . utils/parse_options.sh
 
@@ -98,22 +103,48 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
 fi
 
 
-local/data.sh \
-	--python ${python} \
-	--stage 1 \
-	--stop-stage 4 \
-	--datadir "${datadir}" \
-	--librispeech "${librispeech}" \
-	--ckpt-path "${hubert_dir_path}/hubert_base_ls960.pt" \
-	--feature-type "${feature_type}" \
-	--layer-index ${layer_index} \
-	--nj ${nj} \
-	--max-chunk ${max_chunk} \
-	--sample-rate ${sample_rate} \
-	--n-clusters ${n_clusters} \
-	--kmrootdir "${kmrootdir}" \
-	--percent ${percent} \
-	--km_batch_size ${km_batch_size} \
-	--tsv_dir "${tsv_dir}" \
-	--train_set ${train_set} \
-	--dev_set ${dev_set}
+if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
+    log "Stage 1: Preparing Librispeech data"
+
+    local/data.sh \
+        --python ${python} \
+        --stage 1 \
+        --stop-stage 4 \
+        --datadir "${datadir}" \
+        --librispeech "${librispeech}" \
+        --ckpt-path "${hubert_dir_path}/hubert_base_ls960.pt" \
+        --feature-type "${feature_type}" \
+        --layer-index ${layer_index} \
+        --nj ${nj} \
+        --max-chunk ${max_chunk} \
+        --sample-rate ${sample_rate} \
+        --n-clusters ${n_clusters} \
+        --kmrootdir "${kmrootdir}" \
+        --percent ${percent} \
+        --km_batch_size ${km_batch_size} \
+        --tsv_dir "${tsv_dir}" \
+        --train_set ${train_set} \
+        --dev_set ${dev_set}
+fi
+
+
+if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
+    log "Stage 2: Preparing unsupervised speaker labels"
+
+    for x in ${train_set} ${dev_set}; do
+        # ${python} local/spk_embs/prepare_spk2emb_librispeech.py \
+        #     "${tsv_dir}/${x}.tsv" \
+        #     --model_init "${spk_model_ckpt}" \
+        #     --outdir spk_embs/out_ll/${x} \
+        #     --cuda False
+        ${python} local/spk_embs/prepare_spk_embs_scp.py \
+            "${tsv_dir}/${x}.tsv" \
+            --onnx_path "${spk_model_ckpt}" \
+            --outdir spk_embs/out_ll/${x} \
+            --max_workers 20
+
+        ${python} local/unsupervised_speaker_clustering.py \
+            spk_embs/out_ll/${x}/spk2emb.scp \
+            --outfile "${tsv_dir}/${x}.sid"
+    done
+fi

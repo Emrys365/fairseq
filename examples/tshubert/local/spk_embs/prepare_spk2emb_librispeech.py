@@ -67,6 +67,17 @@ if __name__ == "__main__":
     if args.spk2utt_json.endswith(".json"):
         with open(args.spk2utt_json, "r") as f:
             spk2utt = json.load(f)
+    elif args.spk2utt_json.endswith(".tsv"):
+        spk2utt = {}
+        has_uid = False
+        with open(args.spk2utt_json, "r") as f:
+            root = Path(next(f).strip())
+            for i, line in enumerate(f):
+                if not line.strip():
+                    continue
+                uid = i
+                path = line.strip()
+                spk2utt[uid] = [(uid, str(root / path))]
     else:
         spk2utt = {}
         has_uid = None

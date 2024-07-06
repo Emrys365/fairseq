@@ -13,6 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from feature_utils import get_path_iterator, dump_feature
+from fairseq.data.audio.tshubert_dataset import read_audio_from_ark, read_audio_from_tar
 
 
 logging.basicConfig(
@@ -35,6 +36,8 @@ class WavLMFeatureReader(object):
         self.model = model[0].eval()
         if device == "gpu":
             self.model.cuda()
+        else:
+            self.model.to(device=device)
         self.task = task
         self.layer = layer
         self.max_chunk = max_chunk
@@ -42,7 +45,14 @@ class WavLMFeatureReader(object):
         logger.info(f" max_chunk = {self.max_chunk}")
 
     def read_audio(self, path, ref_len=None):
-        wav, sr = sf.read(path)
+        if path.split(":")[0].endswith(".tar"):
+            # read audio from a tar file
+            wav, sr = read_audio_from_tar(path)
+        elif path.split(":")[0].endswith(".ark"):
+            # read audio from an ark file
+            wav, sr = read_audio_from_ark(path)
+        else:
+            wav, sr = sf.read(path)
         assert sr == self.task.cfg.sample_rate, sr
         if wav.ndim == 2:
             wav = wav.mean(-1)
@@ -57,7 +67,7 @@ class WavLMFeatureReader(object):
             if self.device == "gpu":
                 x = torch.from_numpy(x).float().cuda()
             else:
-                x = torch.from_numpy(x).float()
+                x = torch.from_numpy(x).float().to(device=self.device)
             if self.task.cfg.normalize:
                 x = F.layer_norm(x, x.shape)
             x = x.view(1, -1)
@@ -136,8 +146,7 @@ if __name__ == "__main__":
         "--device",
         type=str,
         default="cpu",
-        choices=("cpu", "gpu"),
-        help="'cuda' or 'cpu device",
+        help="'cuda' or 'cpu' device",
     )
     args = parser.parse_args()
     logger.info(args)

@@ -13,7 +13,7 @@ import torch
 import tqdm
 
 from dump_wavlm_feature import WavLMFeatureReader
-from feature_utils import get_shard_range
+# from feature_utils import get_shard_range
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -22,6 +22,17 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 logger = logging.getLogger("dump_km_label")
+
+
+def get_shard_range(tot, nshard, rank):
+    # Different from feature_utils.get_shard_range, this function shards the list
+    # so that each rank has a similar starting position to read.
+    # (This is for efficiency when reading from a single large file.)
+    assert rank < nshard and rank >= 0, f"invaid rank/nshard {rank}/{nshard}"
+    logger.info(
+        f"rank {rank} of {nshard}, process with slice [{rank}:{tot}:{nshard}]"
+    )
+    return slice(rank, tot, nshard)
 
 
 class ApplyKmeans(object):
@@ -55,8 +66,8 @@ def get_feat_iterator(tsv, reader, nshard, rank):
     with open(tsv, "r") as f:
         root = f.readline().rstrip()
         lines = [line.rstrip() for line in f]
-        start, end = get_shard_range(len(lines), nshard, rank)
-        lines = lines[start:end]
+        start_end = get_shard_range(len(lines), nshard, rank)
+        lines = lines[start_end]
         def iterate():
             for line in lines:
                 subpath, nsample = line.split("\t")
