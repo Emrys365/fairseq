@@ -5,7 +5,7 @@ import contextlib
 import logging
 from argparse import Namespace
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, List, Optional
 import torch
 import torch.nn as nn
 from omegaconf import II, MISSING
@@ -127,6 +127,13 @@ class TsHubertAsrNoEnrollConfig(FairseqDataclass):
     normalize: bool = II("task.normalize")
     data: str = II("task.data")
 
+    freeze_layers: Optional[List[int]] = field(
+        default=None,
+        metadata={
+            "help": "indexes of Transformer layers to always freeze during fine-tuning",
+        },
+    )
+
     # weighted sum of TS-HuBERT features in different Transformer layers
     ssl_layer_selections: Optional[str] = field(
         default=None,
@@ -218,6 +225,7 @@ class TsHubertNoEnrollEncoder(FairseqEncoder):
             "no_mask_channel_overlap": cfg.no_mask_channel_overlap,
             "encoder_layerdrop": cfg.layerdrop,
             "feature_grad_mult": cfg.feature_grad_mult,
+            "freeze_layers": getattr(cfg, "freeze_layers", None),
         }
 
         if cfg.w2v_args is None:
@@ -253,6 +261,9 @@ class TsHubertNoEnrollEncoder(FairseqEncoder):
             model.load_state_dict(state["model"], strict=False)
 
         model.remove_pretraining_modules()
+        # force overwriting in case `freeze_layers` is not stored in the checkpoint
+        freeze_layers = getattr(cfg, "freeze_layers", None)
+        self.freeze_layers = freeze_layers if freeze_layers else ()
 
         super().__init__(pretrain_task.source_dictionary)
 
@@ -327,6 +338,9 @@ class TsHubertNoEnrollEncoder(FairseqEncoder):
     def unfreeze_w2v_model(self):
         for param in self.w2v_model.parameters():
             param.requires_grad = True
+        for i in self.freeze_layers:
+            for param in self.w2v_model.encoder.layers[i].parameters():
+                param.requires_grad = False
 
     def forward(self, source, padding_mask, tbc=True, **kwargs):
 
@@ -369,6 +383,10 @@ class TsHubertNoEnrollEncoder(FairseqEncoder):
             }
 
         ft = self.freeze_finetune_updates <= self.num_updates
+        if ft:
+            self.unfreeze_w2v_model()
+        else:
+            self.freeze_w2v_model()
 
         with torch.no_grad() if not ft else contextlib.ExitStack():
             x, padding_mask = self.w2v_model.extract_features(**w2v_args)

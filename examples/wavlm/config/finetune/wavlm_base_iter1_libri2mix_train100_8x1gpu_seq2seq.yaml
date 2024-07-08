@@ -1,0 +1,124 @@
+# @package _group_
+
+common:
+  fp16: false
+  log_format: json
+  log_interval: 200
+  tensorboard_logdir: tblog
+  seed: 1337
+
+checkpoint:
+  save_interval: 5
+  save_interval_updates: 50000
+  keep_interval_updates: 5
+  no_epoch_checkpoints: true
+  best_checkpoint_metric: wer
+
+distributed_training:
+  ddp_backend: legacy_ddp
+  find_unused_parameters: true
+  distributed_world_size: 8
+  distributed_port: 21671
+  nprocs_per_node: 1
+
+task:
+  _name: wavlm_pretraining
+  data: ???
+  fine_tuning_mix: true
+  label_dir: ???
+  normalize: false  # must be consistent with pre-training
+  labels: ["ltr"]
+  single_target: true
+  pad_audio: true
+  autoregressive: true
+
+dataset:
+  num_workers: 4
+  max_tokens: 750000 #1500000
+  max_tokens_valid: 750000
+  skip_invalid_size_inputs_valid_test: true
+  validate_after_updates: 0 #${model.freeze_finetune_updates}
+  validate_interval: 5
+  train_subset: train
+  valid_subset: valid
+
+criterion:
+  _name: label_smoothed_cross_entropy
+  label_smoothing: 0.1
+  report_accuracy: true
+  post_process: letter
+
+optimization:
+  max_update: 100000
+  lr: [0.0025]
+  sentence_avg: true
+  update_freq: [6]
+
+optimizer:
+  _name: adam
+  adam_betas: (0.9,0.98)
+  adam_eps: 1e-08
+
+lr_scheduler:
+  _name: tri_stage
+  warmup_steps: 15000
+  hold_steps: 0
+  decay_steps: 72000
+  final_lr_scale: 0.05
+
+model:
+  _name: wavlm_seq2seq_mix
+  w2v_path: ???
+  # WavLM
+  apply_mask: true
+  mask_selection: static
+  mask_length: 10
+  mask_other: 0
+  mask_prob: 0.75
+  mask_channel_selection: static
+  mask_channel_length: 64
+  mask_channel_other: 0
+  mask_channel_prob: 0.5
+  layerdrop: 0.1
+  dropout: 0.0
+  activation_dropout: 0.1
+  attention_dropout: 0.0
+  feature_grad_mult: 0.0
+  freeze_finetune_updates: 0
+  spk_emb_dim: 256
+  spk_adapter_type: add
+  adapter_grad_mult: 0.01
+  use_weighted_sum: true
+  # Encoder
+  encoder_conv_kernel_sizes: "3,3"
+  encoder_embed_dim: 512
+  encoder_conv_channels: 512
+  encoder_ffn_embed_dim: 2048
+  encoder_layers: 12
+  encoder_activation_dropout: 0.1
+  # Decoder
+  decoder_embed_dim: 512
+  decoder_ffn_embed_dim: 2048
+  decoder_layers: 6
+  decoder_activation_dropout: 0.1
+
+hydra:
+  job:
+    config:
+      override_dirname:
+        kv_sep: '-'
+        item_sep: '__'
+        exclude_keys:
+          - run
+          - task.data
+          - task.label_dir
+          - model.w2v_path
+          - dataset.train_subset
+          - dataset.valid_subset
+          - criterion.wer_kenlm_model
+          - criterion.wer_lexicon
+  run:
+    dir: ???
+  sweep:
+    dir: ???
+    subdir: ${hydra.job.config_name}__${hydra.job.override_dirname}

@@ -7,7 +7,7 @@ import logging
 import math
 from argparse import Namespace
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, List, Optional
 import numpy as np
 import torch
 import torch.nn as nn
@@ -53,13 +53,13 @@ class WavLMAsrConfig(FairseqDataclass):
     attention_dropout: float = field(
         default=0.0,
         metadata={
-            "help": "dropout probability for attention weights " "inside wavlm model"
+            "help": "dropout probability for attention weights inside wavlm model"
         },
     )
     activation_dropout: float = field(
         default=0.0,
         metadata={
-            "help": "dropout probability after activation in FFN " "inside wavlm model"
+            "help": "dropout probability after activation in FFN inside wavlm model"
         },
     )
     encoder_embed_dim: Optional[int] = field(
@@ -134,6 +134,13 @@ class WavLMAsrConfig(FairseqDataclass):
     )
     normalize: bool = II("task.normalize")
     data: str = II("task.data")
+
+    freeze_layers: Optional[List[int]] = field(
+        default=None,
+        metadata={
+            "help": "indexes of Transformer layers to always freeze during fine-tuning",
+        },
+    )
 
     # this holds the loaded wavlm args
     w2v_args: Any = None
@@ -335,6 +342,7 @@ class WavLMEncoder(FairseqEncoder):
             "no_mask_channel_overlap": cfg.no_mask_channel_overlap,
             "encoder_layerdrop": cfg.layerdrop,
             "feature_grad_mult": cfg.feature_grad_mult,
+            "freeze_layers": getattr(cfg, "freeze_layers", None),
         }
 
         if cfg.w2v_args is None:
@@ -370,6 +378,9 @@ class WavLMEncoder(FairseqEncoder):
             model.load_state_dict(state["model"], strict=False)
 
         model.remove_pretraining_modules()
+        # force overwriting in case `freeze_layers` is not stored in the checkpoint
+        freeze_layers = getattr(cfg, "freeze_layers", None)
+        self.freeze_layers = freeze_layers if freeze_layers else ()
 
         super().__init__(pretrain_task.source_dictionary)
 
@@ -393,15 +404,29 @@ class WavLMEncoder(FairseqEncoder):
         super().set_num_updates(num_updates)
         self.num_updates = num_updates
 
+    def freeze_w2v_model(self):
+        for param in self.w2v_model.parameters():
+            param.requires_grad = False
+
+    def unfreeze_w2v_model(self):
+        for param in self.w2v_model.parameters():
+            param.requires_grad = True
+        for i in self.freeze_layers:
+            for param in self.w2v_model.encoder.layers[i].parameters():
+                param.requires_grad = False
+
     def forward(self, source, padding_mask, tbc=True, **kwargs):
+        ft = self.freeze_finetune_updates <= self.num_updates
+        if ft:
+            self.unfreeze_w2v_model()
+        else:
+            self.freeze_w2v_model()
 
         w2v_args = {
             "source": source,
             "padding_mask": padding_mask,
             "mask": self.apply_mask and self.training,
         }
-
-        ft = self.freeze_finetune_updates <= self.num_updates
 
         with torch.no_grad() if not ft else contextlib.ExitStack():
             x, padding_mask = self.w2v_model.extract_features(**w2v_args)

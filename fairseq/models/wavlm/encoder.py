@@ -319,7 +319,7 @@ class TransformerEncoder(nn.Module):
     def build_adapter_layers(self, layers, input_dim=768, hidden_dim=64):
         # used by fairseq/models/tshubert/tshubert_asr_adapter.py
         for i in layers:
-            if i < self.encoder_layers:
+            if i < len(self.layers):
                 self.layers[i].adapter_layer = AdapterLayer(input_dim, hidden_dim)
 
 

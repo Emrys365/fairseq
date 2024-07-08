@@ -167,6 +167,12 @@ class TsHubertAsrConfig(FairseqDataclass):
             "normalization to (only used when `spk_adapter_type` is `cln`)"
         },
     )
+    freeze_layers: Optional[List[int]] = field(
+        default=None,
+        metadata={
+            "help": "indexes of Transformer layers to always freeze during fine-tuning",
+        },
+    )
 
     # weighted sum of TS-HuBERT features in different Transformer layers
     ssl_layer_selections: Optional[str] = field(
@@ -452,6 +458,7 @@ class TsHubertEncoder(FairseqEncoder):
             "encoder_layerdrop": cfg.layerdrop,
             "feature_grad_mult": cfg.feature_grad_mult,
             "cln_layers": getattr(cfg, "cln_layers", None),
+            "freeze_layers": getattr(cfg, "freeze_layers", None),
         }
 
         if cfg.w2v_args is None:
@@ -490,6 +497,9 @@ class TsHubertEncoder(FairseqEncoder):
         # force overwriting in case `cln_layers` is not stored in the checkpoint
         cln_layers = getattr(cfg, "cln_layers", None)
         model.encoder.cln_layers = cln_layers if cln_layers else ()
+        # force overwriting in case `freeze_layers` is not stored in the checkpoint
+        freeze_layers = getattr(cfg, "freeze_layers", None)
+        self.freeze_layers = freeze_layers if freeze_layers else ()
 
         super().__init__(pretrain_task.source_dictionary)
 
@@ -601,6 +611,9 @@ class TsHubertEncoder(FairseqEncoder):
     def unfreeze_w2v_model(self):
         for param in self.w2v_model.parameters():
             param.requires_grad = True
+        for i in self.freeze_layers:
+            for param in self.w2v_model.encoder.layers[i].parameters():
+                param.requires_grad = False
 
     def forward(self, source, enrollment, padding_mask, tbc=True, **kwargs):
         ft = self.freeze_finetune_updates <= self.num_updates

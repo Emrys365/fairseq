@@ -61,13 +61,13 @@ class WavLMAsrMixConfig(FairseqDataclass):
     attention_dropout: float = field(
         default=0.0,
         metadata={
-            "help": "dropout probability for attention weights " "inside wavlm model"
+            "help": "dropout probability for attention weights inside wavlm model"
         },
     )
     activation_dropout: float = field(
         default=0.0,
         metadata={
-            "help": "dropout probability after activation in FFN " "inside wavlm model"
+            "help": "dropout probability after activation in FFN inside wavlm model"
         },
     )
     encoder_embed_dim: Optional[int] = field(
@@ -161,6 +161,12 @@ class WavLMAsrMixConfig(FairseqDataclass):
         metadata={
             "help": "indexes of Transformer layers to apply conditional layer "
             "normalization to (only used when `spk_adapter_type` is `cln`)"
+        },
+    )
+    freeze_layers: Optional[List[int]] = field(
+        default=None,
+        metadata={
+            "help": "indexes of Transformer layers to always freeze during fine-tuning",
         },
     )
 
@@ -448,6 +454,7 @@ class WavLMEncoder(FairseqEncoder):
             "encoder_layerdrop": cfg.layerdrop,
             "feature_grad_mult": cfg.feature_grad_mult,
             "cln_layers": getattr(cfg, "cln_layers", None),
+            "freeze_layers": getattr(cfg, "freeze_layers", None),
         }
 
         if cfg.w2v_args is None:
@@ -486,6 +493,9 @@ class WavLMEncoder(FairseqEncoder):
         # force overwriting in case `cln_layers` is not stored in the checkpoint
         cln_layers = getattr(cfg, "cln_layers", None)
         model.encoder.cln_layers = cln_layers if cln_layers else ()
+        # force overwriting in case `freeze_layers` is not stored in the checkpoint
+        freeze_layers = getattr(cfg, "freeze_layers", None)
+        self.freeze_layers = freeze_layers if freeze_layers else ()
 
         super().__init__(pretrain_task.source_dictionary)
 
@@ -597,6 +607,9 @@ class WavLMEncoder(FairseqEncoder):
     def unfreeze_w2v_model(self):
         for param in self.w2v_model.parameters():
             param.requires_grad = True
+        for i in self.freeze_layers:
+            for param in self.w2v_model.encoder.layers[i].parameters():
+                param.requires_grad = False
 
     def forward(self, source, enrollment, padding_mask, tbc=True, **kwargs):
         spk_emb = enrollment  # B x Dim

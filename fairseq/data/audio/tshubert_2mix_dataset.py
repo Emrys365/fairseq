@@ -1,16 +1,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import io
 import itertools
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
+import kaldiio
 import numpy as np
-
+import soundfile as sf
 import torch
 import torch.nn.functional as F
 from fairseq.data import data_utils
@@ -175,6 +178,62 @@ def verify_label_lengths(
         )
 
 
+def read_file_from_tar(tar_path, offset, size):
+    """Read a single file (specified by offset and size) from a tar file.
+
+    Args:
+        tar_path (str): Path to the tar file
+        offset (int): Offset of the target file to read in the tar file
+        size (int): Total size of the target file
+    Returns:
+        ret (BytesIO): Bytes of the target file
+    """
+    with open(tar_path, "rb") as tar:
+        tar.seek(offset)
+        buffer = tar.read(size)
+    return io.BytesIO(buffer)
+
+
+def read_audio_from_tar(path):
+    # read audio from a tar file
+
+    # format:
+    # (1) /path/to/tar_file.tar:[offset]:[size]
+    # (2) /path/to/tar_file.tar:[offset]:[size]#[start1]:[end1],[start2]:[end2],...
+    assert ":" in path, path
+    if "#" in path:
+        # read audio with start and end indices
+        tar_path_info, start_end = path.split("#")
+        tar_path, offset, size = tar_path_info.split(":")
+        start_end = sorted(
+            [tuple(map(int, x.split(":"))) for x in start_end.split(",")],
+            key=lambda x: x[0],
+        )
+    else:
+        tar_path, offset, size = path.split(":")
+        start_end = None
+    offset = int(offset)
+    size = int(size)
+    with sf.SoundFile(read_file_from_tar(tar_path, offset, size)) as f:
+        sr = f.samplerate
+        if start_end is None:
+            wav = f.read()
+        else:
+            lst = []
+            for st, et in start_end:
+                assert et > st, (st, et)
+                f.seek(st)
+                lst.append(f.read(et - st))
+            wav = np.hstack(lst)
+    return wav, sr
+
+
+def read_audio_from_ark(path):
+    # read audio from an ark file
+    sr, wav = kaldiio.load_mat(path)
+    return wav, sr
+
+
 class TsHubert2MixDataset(FairseqDataset):
     def __init__(
         self,
@@ -222,7 +281,10 @@ class TsHubert2MixDataset(FairseqDataset):
         )
         self.audio_root = audio_root
         self.audio_names = audio_names
-        if "train" not in Path(manifest_utt2enroll).stem:
+        if (
+            "train" not in Path(manifest_utt2enroll).stem
+            or not Path(manifest_utt2enroll).exists()
+        ):
             self.audio_spk2enroll = {}
             self.has_enroll_and_emb = isinstance(enrolls[0], tuple)
         else:
@@ -231,7 +293,10 @@ class TsHubert2MixDataset(FairseqDataset):
                 self.audio_spk2enroll = json.load(f)
             key0 = next(iter(self.audio_spk2enroll))
             # load enrollment audio and the corresponding embedding at the same time
-            self.has_enroll_and_emb = isinstance(self.audio_spk2enroll[key0][0], (tuple, list))
+            self.has_enroll_and_emb = (
+                isinstance(self.audio_spk2enroll[key0][0], (tuple, list))
+                and len(self.audio_spk2enroll[key0][0]) > 2
+            )
         self.audio_uids = uids
         self.audio_sids = sids
         self.audio_enrolls = enrolls
@@ -287,11 +352,13 @@ class TsHubert2MixDataset(FairseqDataset):
         self.autoregressive = autoregressive
 
     def get_audio(self, index):
-        import soundfile as sf
-
         wav_path = os.path.join(self.audio_root, self.audio_names[index])
-        st, et = self.intervals[index]
-        wav, cur_sample_rate = sf.read(wav_path, start=st, stop=et)
+        if wav_path.split(":")[0].endswith(".tar"): # audio in a tar file
+            wav, cur_sample_rate = read_audio_from_tar(wav_path)
+        elif re.match(r".*\.ark:\d+", wav_path):  # kaldi ark style audio path
+            wav, cur_sample_rate = read_audio_from_ark(wav_path)
+        else:
+            wav, cur_sample_rate = sf.read(wav_path)
         wav = torch.from_numpy(wav).float()
         wav = self.postprocess(wav, cur_sample_rate)
         return wav
@@ -299,10 +366,17 @@ class TsHubert2MixDataset(FairseqDataset):
     def get_enroll(self, wav_path):
         if wav_path.endswith("npy"):
             wav = torch.from_numpy(np.load(wav_path)).float()
+            norm = np.linalg.norm(wav, keepdims=True)
+            if norm != 0:
+                wav /= norm
         else:
-            import soundfile as sf
+            if wav_path.split(":")[0].endswith(".tar"): # audio in a tar file
+                wav, cur_sample_rate = read_audio_from_tar(wav_path)
+            elif re.match(r".*\.ark:\d+", wav_path):  # kaldi ark style audio path
+                wav, cur_sample_rate = read_audio_from_ark(wav_path)
+            else:
+                wav, cur_sample_rate = sf.read(wav_path)
 
-            wav, cur_sample_rate = sf.read(wav_path)
             wav = torch.from_numpy(wav).float()
             wav = self.postprocess(wav, cur_sample_rate)
         return wav
@@ -539,11 +613,15 @@ class TsHubert2MixDataset(FairseqDataset):
         return self.size(index)
 
     def size(self, index):
+        """Return an example's size as a float or tuple. This value is used when
+        filtering a dataset with ``--max-positions``."""
         if self.pad_audio:
             return self.sizes[index]
         return min(self.sizes[index], self.max_sample_size)
 
     def ordered_indices(self):
+        """Return an ordered list of indices. Batches will be constructed based
+        on this order."""
         if self.shuffle:
             order = [np.random.permutation(len(self))]
         else:
