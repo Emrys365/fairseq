@@ -6,5 +6,3 @@
 from .berard import *  # noqa
 from .convtransformer import *  # noqa
 from .s2t_transformer import *  # noqa
-from .s2t_transformer_tse import *  # noqa
-from .s2t_transformer_tshubert import *  # noqa
